@@ -14,11 +14,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
-import { Loader2, Book, Trash2, ChevronLeft, ChevronRight, PlusCircle, Trophy } from 'lucide-react';
+import { Loader2, Book, Trash2, ChevronLeft, ChevronRight, PlusCircle, Trophy, List, PenSquare } from 'lucide-react';
 
 const journalFormSchema = z.object({ content: z.string().min(10, { message: "Entry must be at least 10 characters." }), });
-// --- FIX: Use z.number() instead of z.coerce.number() ---
-const detoxFormSchema = z.object({ duration: z.number().min(1, { message: "Duration must be at least 1 minute." }), });
+const detoxFormSchema = z.object({ duration: z.coerce.number().min(1, { message: "Duration must be at least 1 minute." }), });
+
+type MobileView = 'contents' | 'page';
 
 const JournalPage: React.FC = () => {
     const [loading, setLoading] = useState(true);
@@ -27,6 +28,7 @@ const JournalPage: React.FC = () => {
     const [isWriting, setIsWriting] = useState(false);
     const [activeIndex, setActiveIndex] = useState(0);
     const [isDetoxModalOpen, setIsDetoxModalOpen] = useState(false);
+    const [mobileView, setMobileView] = useState<MobileView>('page');
     
     const journalForm = useForm<z.infer<typeof journalFormSchema>>({ resolver: zodResolver(journalFormSchema), defaultValues: { content: "" } });
     const detoxForm = useForm<z.infer<typeof detoxFormSchema>>({ resolver: zodResolver(detoxFormSchema) });
@@ -38,7 +40,8 @@ const JournalPage: React.FC = () => {
             .then(([profileData, entriesData]) => {
                 setProfile(profileData);
                 setEntries(entriesData);
-                if (entriesData.length === 0) setIsWriting(true);
+                if (entriesData.length === 0) { setIsWriting(true); setMobileView('page'); } 
+                else { setIsWriting(false); setMobileView('page'); }
             })
             .catch(() => toast.error("Failed to load journal data."))
             .finally(() => setLoading(false));
@@ -52,6 +55,7 @@ const JournalPage: React.FC = () => {
             setEntries(newEntries);
             setActiveIndex(0);
             setIsWriting(false);
+            setMobileView('page');
             journalForm.reset();
             toast.success("A new page has been written.");
         } catch { toast.error("The ink seems to have run dry. Please try again."); }
@@ -81,44 +85,65 @@ const JournalPage: React.FC = () => {
 
     const activeEntry = entries[activeIndex];
 
+    // --- FIX: Define the helper components to accept props ---
+    const ContentsPage = () => (
+        <div className="bg-card p-6 md:p-8 flex flex-col min-h-[600px]" style={{backgroundImage: "url('/paper-texture.png')"}}>
+            <h3 className="font-display text-2xl font-bold mb-4 border-b-2 border-primary/20 pb-2">Contents</h3>
+            <div className="flex-1 overflow-y-auto -mr-2 pr-2 space-y-1 font-serif">
+                {entries.map((entry, index) => (
+                    <button key={entry.id} onClick={() => { setActiveIndex(index); setIsWriting(false); setMobileView('page'); }} className={cn("w-full text-left p-2 rounded-md text-sm transition-colors", activeIndex === index && !isWriting ? "bg-primary/10 text-primary font-bold" : "hover:bg-primary/5")}>
+                        {new Date(entry.entry_date + 'T00:00:00').toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
+                    </button>
+                ))}
+                {entries.length === 0 && <p className="text-sm text-muted-foreground italic">Your journal is currently empty.</p>}
+            </div>
+            <Button variant="outline" className="w-full mt-4 border-primary/30" onClick={() => { setIsWriting(true); setMobileView('page'); }}><PlusCircle className="mr-2 h-4 w-4" /> New Entry</Button>
+        </div>
+    );
+
+    const PageContent = () => (
+        <div className="bg-card p-6 md:p-8 flex flex-col min-h-[600px]" style={{backgroundImage: "url('/paper-texture.png')"}}>
+            {isWriting ? (
+                <><h3 className="font-display text-2xl font-bold mb-4 border-b-2 border-primary/20 pb-2">New Page</h3><Form {...journalForm}><form onSubmit={journalForm.handleSubmit(handleAddEntry)} className="flex flex-col flex-1"><FormField control={journalForm.control} name="content" render={({ field }) => (<FormItem className="flex-1 flex flex-col"><FormControl><Textarea placeholder={journalPrompts} className="flex-1 font-serif text-base resize-none bg-transparent border-none focus-visible:ring-0 focus-visible:ring-offset-0 p-0" {...field} /></FormControl><FormMessage /></FormItem>)}/><div className="flex justify-end gap-2 mt-4">{entries.length > 0 && <Button type="button" variant="ghost" onClick={() => setIsWriting(false)}>Cancel</Button>}<Button type="submit" disabled={journalForm.formState.isSubmitting}>{journalForm.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}Inscribe Entry</Button></div></form></Form></>
+            ) : activeEntry ? (
+                <div className="flex-1 flex flex-col font-serif">
+                    <div className="flex items-center justify-between border-b-2 border-primary/20 pb-2 mb-4"><h3 className="font-display text-xl font-bold">{new Date(activeEntry.entry_date + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</h3><AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7"><Trash2 className="h-4 w-4 text-destructive"/></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Remove this page?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteEntry(activeEntry.id)} className="bg-destructive hover:bg-destructive/90">Remove Page</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></div>
+                    <div className="prose prose-sm max-w-none flex-1 overflow-y-auto prose-p:text-base prose-headings:font-display"><ReactMarkdown>{activeEntry.content}</ReactMarkdown></div>
+                </div>
+            ) : (<div className="flex flex-col items-center justify-center flex-1 text-center text-muted-foreground font-serif"><Book className="h-16 w-16 mb-4"/><p>Select an entry from the Contents page to read.</p></div>)}
+        </div>
+    );
+
     return (
         <div className="space-y-4 animate-fade-in">
             <div className="text-center">
                 <h2 className="text-3xl font-display font-bold tracking-tight">The Scholar's Journal</h2>
                 <p className="text-muted-foreground">A chronicle of thoughts, reflections, and progress.</p>
             </div>
-
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                 <div className="lg:col-span-9">
-                    <div className="relative grid grid-cols-1 md:grid-cols-2 max-w-5xl mx-auto shadow-2xl rounded-lg overflow-hidden border-4 border-primary bg-primary w-full" style={{ boxShadow: '0 10px 30px rgba(0,0,0,0.4), inset 0 0 10px rgba(0,0,0,0.3)' }}>
-                        <div className="absolute left-1/2 -translate-x-1/2 w-8 h-full bg-gradient-to-r from-yellow-950 via-yellow-800 to-yellow-950 z-10" />
-                        <div className="bg-card p-6 md:p-8 flex flex-col min-h-[600px]" style={{backgroundImage: "url('/paper-texture.png')"}}>
-                            <h3 className="font-display text-2xl font-bold mb-4 border-b-2 border-primary/20 pb-2">Contents</h3>
-                            <div className="flex-1 overflow-y-auto -mr-2 pr-2 space-y-1 font-serif">
-                                {entries.map((entry, index) => (
-                                    <button key={entry.id} onClick={() => { setActiveIndex(index); setIsWriting(false); }} className={cn("w-full text-left p-2 rounded-md text-sm transition-colors", activeIndex === index && !isWriting ? "bg-primary/10 text-primary font-bold" : "hover:bg-primary/5")}>
-                                        {new Date(entry.entry_date + 'T00:00:00').toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
-                                    </button>
-                                ))}
-                                {entries.length === 0 && <p className="text-sm text-muted-foreground italic">Your journal is currently empty.</p>}
-                            </div>
-                            <Button variant="outline" className="w-full mt-4 border-primary/30" onClick={() => setIsWriting(true)}><PlusCircle className="mr-2 h-4 w-4" /> New Entry</Button>
+                    <div className="relative shadow-2xl rounded-lg overflow-hidden border-4 border-primary bg-primary w-full" style={{ boxShadow: '0 10px 30px rgba(0,0,0,0.4), inset 0 0 10px rgba(0,0,0,0.3)' }}>
+                        <div className="hidden md:grid md:grid-cols-2">
+                            <div className="absolute left-1/2 -translate-x-1/2 w-8 h-full bg-gradient-to-r from-yellow-950 via-yellow-800 to-yellow-950 z-10 hidden md:block" />
+                            <ContentsPage />
+                            <PageContent />
                         </div>
-                        <div className="bg-card p-6 md:p-8 flex flex-col min-h-[600px]" style={{backgroundImage: "url('/paper-texture.png')"}}>
-                            {isWriting ? (
-                                <><h3 className="font-display text-2xl font-bold mb-4 border-b-2 border-primary/20 pb-2">New Page</h3><Form {...journalForm}><form onSubmit={journalForm.handleSubmit(handleAddEntry)} className="flex flex-col flex-1"><FormField control={journalForm.control} name="content" render={({ field }) => (<FormItem className="flex-1 flex flex-col"><FormControl><Textarea placeholder={journalPrompts} className="flex-1 font-serif text-base resize-none bg-transparent border-none focus-visible:ring-0 focus-visible:ring-offset-0 p-0" {...field} /></FormControl><FormMessage /></FormItem>)}/><div className="flex justify-end gap-2 mt-4">{entries.length > 0 && <Button type="button" variant="ghost" onClick={() => setIsWriting(false)}>Cancel</Button>}<Button type="submit" disabled={journalForm.formState.isSubmitting}>{journalForm.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}Inscribe Entry</Button></div></form></Form></>
-                            ) : activeEntry ? (
-                                <div className="flex-1 flex flex-col font-serif">
-                                    <div className="flex items-center justify-between border-b-2 border-primary/20 pb-2 mb-4"><h3 className="font-display text-xl font-bold">{new Date(activeEntry.entry_date + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</h3><AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7"><Trash2 className="h-4 w-4 text-destructive"/></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Remove this page?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteEntry(activeEntry.id)} className="bg-destructive hover:bg-destructive/90">Remove Page</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></div>
-                                    <div className="prose prose-sm max-w-none flex-1 overflow-y-auto prose-p:text-base prose-headings:font-display"><ReactMarkdown>{activeEntry.content}</ReactMarkdown></div>
-                                </div>
-                            ) : (<div className="flex flex-col items-center justify-center flex-1 text-center text-muted-foreground font-serif"><Book className="h-16 w-16 mb-4"/><p>Select an entry from the Contents page to read.</p></div>)}
+                        <div className="md:hidden">
+                           {mobileView === 'contents' ? <ContentsPage /> : <PageContent />}
                         </div>
                     </div>
-                    <div className="flex items-center justify-center mt-4 gap-4">
-                        <Button variant="outline" size="sm" onClick={() => setActiveIndex(activeIndex - 1)} disabled={activeIndex <= 0 || isWriting}><ChevronLeft className="h-4 w-4 mr-1"/> Prev. Page</Button>
-                        <span className="text-sm text-muted-foreground">{entries.length > 0 && !isWriting ? `Page ${activeIndex + 1}` : ''}</span>
-                        <Button variant="outline" size="sm" onClick={() => setActiveIndex(activeIndex + 1)} disabled={activeIndex >= entries.length - 1 || isWriting}>Next Page <ChevronRight className="h-4 w-4 ml-1"/></Button>
+                    <div className="flex items-center justify-between mt-4 md:justify-center">
+                        <div className="md:hidden">
+                            <Button variant="outline" size="sm" onClick={() => setMobileView(mobileView === 'contents' ? 'page' : 'contents')}>
+                                {mobileView === 'contents' ? <PenSquare className="h-4 w-4 mr-2"/> : <List className="h-4 w-4 mr-2"/>}
+                                {mobileView === 'contents' ? 'View Page' : 'View Contents'}
+                            </Button>
+                        </div>
+                        <div className="flex items-center justify-center gap-4">
+                            <Button variant="outline" size="sm" onClick={() => setActiveIndex(activeIndex - 1)} disabled={activeIndex <= 0 || isWriting}><ChevronLeft className="h-4 w-4 mr-1"/> Prev. Page</Button>
+                            <span className="text-sm text-muted-foreground">{entries.length > 0 && !isWriting ? `Page ${activeIndex + 1}` : ''}</span>
+                            <Button variant="outline" size="sm" onClick={() => setActiveIndex(activeIndex + 1)} disabled={activeIndex >= entries.length - 1 || isWriting}>Next Page <ChevronRight className="h-4 w-4 ml-1"/></Button>
+                        </div>
                     </div>
                 </div>
                 <div className="lg:col-span-3">
@@ -134,7 +159,6 @@ const JournalPage: React.FC = () => {
                                         <FormField control={detoxForm.control} name="duration" render={({ field }) => (
                                             <FormItem>
                                                 <FormLabel>Duration (in minutes)</FormLabel>
-                                                {/* --- FIX: Added parseInt onChange handler --- */}
                                                 <FormControl><Input type="number" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} /></FormControl>
                                                 <FormMessage />
                                             </FormItem>

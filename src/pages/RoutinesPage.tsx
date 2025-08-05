@@ -1,67 +1,44 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
 import { toast } from "sonner";
-import * as api from '../services/api';
-import { supabase } from '../supabaseClient';
+import { supabase } from '../supabaseClient'; 
 import HabitTracker from '../components/HabitTracker';
 import { Tome } from '../components/Tome';
+import { useDataStore } from '../stores/useDataStore';
+import * as api from '../services/api';
 
 import { Button } from '@/components/ui/button';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Loader2, Trash2, Sparkles, Sunrise, Sunset } from 'lucide-react';
 
 const RoutinesPage: React.FC = () => {
-    const [loading, setLoading] = useState(true);
+    // Get ALL state and actions from the central Zustand store
+    const { 
+        routines, 
+        habits, 
+        habitLogs, 
+        isLoadingRoutines, 
+        fetchRoutinesAndHabits, 
+        addHabit,
+        toggleHabit,
+        deleteHabit,
+        deleteRoutine 
+    } = useDataStore();
+
+    // Local state is only for UI elements on this page
     const [generatingRoutineId, setGeneratingRoutineId] = useState<number | null>(null);
-    const [routines, setRoutines] = useState<api.Routine[]>([]);
-    const [habits, setHabits] = useState<api.Habit[]>([]);
-    const [habitLogs, setHabitLogs] = useState<api.HabitLog[]>([]);
-    const location = useLocation();
 
-    // The single source of truth for fetching and setting all data for this page.
-    const refreshData = useCallback(async () => {
-        try {
-            let routinesData = await api.getRoutines();
-            let routinesWereCreated = false;
-            if (!routinesData.find(r => r.time_of_day === 'morning')) {
-                await api.addRoutine('The Morning Ritual', 'morning');
-                routinesWereCreated = true;
-            }
-            if (!routinesData.find(r => r.time_of_day === 'evening')) {
-                await api.addRoutine('The Evening Ritual', 'evening');
-                routinesWereCreated = true;
-            }
-            if (routinesWereCreated) {
-                routinesData = await api.getRoutines();
-            }
-            
-            const [habitsData, logsData] = await Promise.all([
-                api.getHabits(), api.getHabitLogs(),
-            ]);
-
-            setRoutines(routinesData);
-            setHabits(habitsData);
-            setHabitLogs(logsData);
-        } catch (error) { 
-            toast.error("Failed to conjure the ritual tomes."); 
-        }
-    }, []);
-
-    // This effect runs on initial load and whenever the user navigates to this page.
-    useEffect(() => { 
-        setLoading(true);
-        refreshData().finally(() => setLoading(false));
-    }, [refreshData, location.pathname]); 
-
-    // --- Data Mutation Handlers ---
+    // Fetch the initial data when the component mounts
+    useEffect(() => {
+        fetchRoutinesAndHabits();
+    }, [fetchRoutinesAndHabits]);
 
     const handleGenerateHabits = async (routine: api.Routine) => {
         setGeneratingRoutineId(routine.id);
-
         const promise = supabase.functions.invoke('generate-routine', { body: { timeOfDay: routine.time_of_day } })
             .then(async ({ error, data }) => {
                 if (error) throw error;
-                await refreshData(); // Re-fetch only on success
+                // Tell the store to refetch after the AI is done
+                fetchRoutinesAndHabits(); 
                 return data;
             });
 
@@ -70,57 +47,40 @@ const RoutinesPage: React.FC = () => {
             success: (data: any) => data.message || 'The ether has whispered new rituals!',
             error: (err) => err.message || 'The divination failed.',
         });
-
-        // Use the promise's own finally, not the toast's
+        
         promise.finally(() => setGeneratingRoutineId(null));
     };
     
-    const handleAddHabit = async (name: string, routine_id: number) => {
-        toast.promise(
-            api.addHabit(name, routine_id).then(() => refreshData()),
-            {
-                loading: 'Inscribing ritual...',
-                success: 'Ritual inscribed!',
-                error: 'Failed to inscribe ritual.',
-            }
-        );
+    // Handlers now call the store's actions, which handle both the API call and state update
+    const handleAddHabit = (name: string, routine_id: number) => {
+        toast.promise(addHabit(name, routine_id), {
+            loading: 'Inscribing ritual...',
+            success: 'Ritual inscribed!',
+            error: 'Failed to inscribe ritual.',
+        });
     };
 
-    const handleToggleHabit = async (habitId: number, isCompleted: boolean) => {
-        try {
-            await api.toggleHabitLogForToday(habitId, isCompleted);
-            const logsData = await api.getHabitLogs();
-            setHabitLogs(logsData);
-        } catch (error) { 
-            toast.error("Failed to perform the ritual."); 
-        }
+    const handleToggleHabit = (habitId: number, isCompleted: boolean) => {
+        toggleHabit(habitId, isCompleted); // Optimistic, no toast
     };
 
-    const handleDeleteHabit = async (habitId: number) => {
-        toast.promise(
-            api.deleteHabit(habitId).then(() => refreshData()),
-            {
-                loading: 'Erasing ritual...',
-                success: 'A ritual was erased.',
-                error: 'Failed to erase the ritual.',
-            }
-        );
+    const handleDeleteHabit = (habitId: number) => {
+        toast.promise(deleteHabit(habitId), {
+            loading: 'Erasing ritual...',
+            success: 'Ritual erased.',
+            error: 'Failed to erase ritual.',
+        });
     };
 
-    const handleDeleteRoutine = async (routineId: number) => {
-        toast.promise(
-            api.deleteRoutine(routineId).then(() => refreshData()),
-            {
-                loading: 'Clearing the tome...',
-                success: 'The tome has been cleared!',
-                error: 'Failed to clear the tome.',
-            }
-        );
+    const handleDeleteRoutine = (routineId: number) => {
+        toast.promise(deleteRoutine(routineId), {
+            loading: 'Clearing the tome...',
+            success: 'The tome has been cleared!',
+            error: 'Failed to clear the tome.',
+        });
     };
 
-    // --- Render Logic ---
-
-    if (loading) { 
+    if (isLoadingRoutines) { 
         return <div className="flex h-64 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>; 
     }
     
@@ -147,28 +107,13 @@ const RoutinesPage: React.FC = () => {
             </Tome>
             <div className="flex justify-between mt-4 px-2">
                 <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
-                            <Trash2 className="mr-2 h-4 w-4"/> Clear Tome
-                        </Button>
-                    </AlertDialogTrigger>
+                    <AlertDialogTrigger asChild><Button variant="ghost" size="sm" className="text-destructive hover:text-destructive"><Trash2 className="mr-2 h-4 w-4"/> Clear Tome</Button></AlertDialogTrigger>
                     <AlertDialogContent>
-                        <AlertDialogHeader>
-                            <AlertDialogTitle>Clear this tome?</AlertDialogTitle>
-                            <AlertDialogDescription>This will erase all inscribed rituals from your {routine.time_of_day} tome.</AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDeleteRoutine(routine.id)} className="bg-destructive hover:bg-destructive/90">Clear All</AlertDialogAction>
-                        </AlertDialogFooter>
+                        <AlertDialogHeader><AlertDialogTitle>Clear this tome?</AlertDialogTitle><AlertDialogDescription>This will erase all inscribed rituals from your {routine.time_of_day} tome.</AlertDialogDescription></AlertDialogHeader>
+                        <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteRoutine(routine.id)}>Clear All</AlertDialogAction></AlertDialogFooter>
                     </AlertDialogContent>
                 </AlertDialog>
-                <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => handleGenerateHabits(routine)} 
-                    disabled={!!generatingRoutineId}
-                >
+                <Button variant="outline" size="sm" onClick={() => handleGenerateHabits(routine)} disabled={!!generatingRoutineId}>
                     {generatingRoutineId === routine.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     <Sparkles className="mr-2 h-4 w-4" /> Divine Rituals
                 </Button>
