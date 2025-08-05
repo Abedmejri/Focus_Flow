@@ -10,10 +10,11 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Loader2, AlertCircle, CheckCircle2, Wand } from "lucide-react";
 
 const formSchema = z.object({
-  email: z.string().email({ message: "Please enter a valid email." }),
+  // Add .trim() for good data hygiene
+  email: z.string().email({ message: "Please enter a valid email." }).trim(),
 });
 
 const ForgotPasswordPage: React.FC = () => {
@@ -31,11 +32,13 @@ const ForgotPasswordPage: React.FC = () => {
     setAuthError(null);
     setSuccess(false);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(values.email, {
-        redirectTo: `${window.location.origin}/update-password`,
-      });
+      // Best Practice: Let Supabase use the Site URL you configured in the dashboard.
+      // This makes your code more portable between local, preview, and production environments.
+      const { error } = await supabase.auth.resetPasswordForEmail(values.email);
+
       if (error) throw error;
       setSuccess(true);
+      form.reset(); // Clear the form on success
     } catch (error: any) {
       setAuthError(error.error_description || error.message);
     } finally {
@@ -44,30 +47,54 @@ const ForgotPasswordPage: React.FC = () => {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-muted/40 animate-fade-in">
-      <Card className="w-full max-w-sm">
+    <div className="flex items-center justify-center min-h-screen bg-muted/40 p-4 animate-fade-in">
+      <Card className="w-full max-w-sm animate-slide-up-fade">
         <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-2xl">Reset Password</CardTitle>
-          <CardDescription>Enter your email to receive a password reset link.</CardDescription>
+          <div className="flex justify-center mb-4">
+            <Wand className="h-12 w-12 text-primary" />
+          </div>
+          <CardTitle className="text-2xl font-display font-bold">Forgot Your Incantation?</CardTitle>
+          <CardDescription>Enter your email to receive a restoration spell.</CardDescription>
         </CardHeader>
         <CardContent>
-          {authError && <Alert variant="destructive" className="mb-4"><AlertCircle className="h-4 w-4" /><AlertTitle>Error</AlertTitle><AlertDescription>{authError}</AlertDescription></Alert>}
-          {success && <Alert className="mb-4 border-green-500 text-green-700"><CheckCircle2 className="h-4 w-4 text-green-500" /><AlertTitle>Success!</AlertTitle><AlertDescription>Password reset link sent! Please check your email.</AlertDescription></Alert>}
+          {authError && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Spell Failed</AlertTitle>
+              <AlertDescription>{authError}</AlertDescription>
+            </Alert>
+          )}
+          {success && (
+            <Alert className="mb-4 border-green-500 text-green-700">
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
+              <AlertTitle>Missive Sent!</AlertTitle>
+              <AlertDescription>A scroll with a restoration link has been sent to your email.</AlertDescription>
+            </Alert>
+          )}
           
           <Form {...form}>
             <form onSubmit={form.handleSubmit(handlePasswordReset)} className="space-y-4">
-              <FormField control={form.control} name="email" render={({ field }) => (
-                  <FormItem><FormLabel>Email</FormLabel><FormControl><Input placeholder="you@example.com" {...field} /></FormControl><FormMessage /></FormItem>
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Scribe's Email</FormLabel>
+                    <FormControl><Input placeholder="you@example.com" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
               )}/>
               <Button type="submit" className="w-full" disabled={loading || success}>
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Send Reset Link
+                Send Restoration Link
               </Button>
             </form>
           </Form>
         </CardContent>
         <CardFooter className="flex justify-center text-sm">
-          <Link to="/login" className="font-medium text-primary hover:underline">Back to Login</Link>
+          <Link to="/login" className="font-medium text-primary hover:underline">
+            Remembered the Incantation? Log In
+          </Link>
         </CardFooter>
       </Card>
     </div>
