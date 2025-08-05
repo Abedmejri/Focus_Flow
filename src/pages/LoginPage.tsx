@@ -12,9 +12,10 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, AlertCircle } from "lucide-react";
 
+// --- THE FIX IS ON THIS LINE ---
 const formSchema = z.object({
-  email: z.string().email({ message: "Please enter a valid email." }),
-  password: z.string().min(1, { message: "Password cannot be empty." }),
+  email: z.string().email({ message: "Please enter a valid email." }).trim(), // Add .trim() here
+  password: z.string().min(1, { message: "Password cannot be empty." }).trim(),
 });
 
 const LoginPage: React.FC = () => {
@@ -31,6 +32,7 @@ const LoginPage: React.FC = () => {
     setLoading(true);
     setAuthError(null);
     try {
+      // By the time `values` gets here, `values.email` will already be trimmed.
       const { error } = await supabase.auth.signInWithPassword({
         email: values.email,
         password: values.password,

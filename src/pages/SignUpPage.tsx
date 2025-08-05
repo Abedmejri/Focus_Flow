@@ -13,8 +13,8 @@ import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 
 const formSchema = z.object({
   fullName: z.string().min(2, { message: "Name must be at least 2 characters." }),
-  email: z.string().email(),
-  password: z.string().min(6, { message: "Password must be at least 6 characters." }),
+  email: z.string().email().trim(),
+  password: z.string().min(6, { message: "Password must be at least 6 characters." }).trim(),
 });
 
 const SignUpPage: React.FC = () => {
