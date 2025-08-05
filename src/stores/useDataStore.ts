@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import * as api from '../services/api';
 
-// Define the shape of our store's state and actions
+// --- THE FIX IS IN THIS INTERFACE ---
 interface DataStoreState {
   // Routines Data
   routines: api.Routine[];
@@ -14,6 +14,10 @@ interface DataStoreState {
   // Loading State
   isLoadingGoals: boolean;
   isLoadingRoutines: boolean;
+
+  // --- ADD THESE TWO LINES BACK ---
+  routinesVersion: number;
+  triggerRoutinesRefresh: () => void;
   
   // Actions
   fetchRoutinesAndHabits: () => Promise<void>;
@@ -42,8 +46,13 @@ export const useDataStore = create<DataStoreState>((set, get) => ({
   tasks: [],
   isLoadingGoals: true,
   isLoadingRoutines: true,
+  routinesVersion: 0, // <-- Add initial value for the trigger
 
-  // --- DATA FETCHING ACTIONS ---
+  // --- ACTIONS ---
+
+  // Simple action that increments the version counter.
+  // This is the "bell" that other components can ring.
+  triggerRoutinesRefresh: () => set(state => ({ routinesVersion: state.routinesVersion + 1 })),
 
   fetchRoutinesAndHabits: async () => {
     try {
@@ -98,7 +107,7 @@ export const useDataStore = create<DataStoreState>((set, get) => ({
   addHabit: async (name, routine_id) => { await api.addHabit(name, routine_id); await get().fetchRoutinesAndHabits(); },
   toggleHabit: async (habitId, isCompleted) => {
     await api.toggleHabitLogForToday(habitId, isCompleted);
-    const logsData = await api.getHabitLogs(); // Logs are simple, just refetch them
+    const logsData = await api.getHabitLogs();
     set({ habitLogs: logsData });
   },
   deleteHabit: async (habitId) => { await api.deleteHabit(habitId); await get().fetchRoutinesAndHabits(); },

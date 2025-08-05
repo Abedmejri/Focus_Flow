@@ -32,9 +32,9 @@ const AICoachPage: React.FC = () => {
         if (!lottie) return;
         
         if (coachState === 'thinking') {
-            lottie.playSegments(ANIMATION_SEGMENTS.THINKING_LOOP, true);
+            lottie.playSegments(ANIMATION_SEGMENTS.THINKING_LOOP as [number, number], true);
         } else {
-            lottie.playSegments(ANIMATION_SEGMENTS.IDLE_LOOP, true);
+            lottie.playSegments(ANIMATION_SEGMENTS.IDLE_LOOP as [number, number], true);
         }
     }, [coachState]);
 
@@ -47,7 +47,7 @@ const AICoachPage: React.FC = () => {
             const { data, error } = await supabase.functions.invoke('ai-coach', { body: { prompt } });
             if (error) throw error;
             if (!data.response) throw new Error("The sage seems to be lost in thought...");
-            lottieRef.current?.playSegments(ANIMATION_SEGMENTS.TALKING, false);
+            lottieRef.current?.playSegments(ANIMATION_SEGMENTS.TALKING as [number, number], false);
             setCoachState('talking');
             setCurrentMessage(data.response);
         } catch (error: any) {
@@ -64,7 +64,7 @@ const AICoachPage: React.FC = () => {
         try {
             const { data, error } = await supabase.functions.invoke('generate-routine', { body: { timeOfDay } });
             if (error) throw error;
-            lottieRef.current?.playSegments(ANIMATION_SEGMENTS.TALKING, false);
+            lottieRef.current?.playSegments(ANIMATION_SEGMENTS.TALKING as [number, number], false);
             setCoachState('talking');
             setCurrentMessage(data.message);
             toast.success("Routine updated!", { description: `New habits have been added to your ${timeOfDay} routine page.` });
